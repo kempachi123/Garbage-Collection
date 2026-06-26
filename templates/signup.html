@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Garbage Collector Service - Sign Up</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .signup-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        h2 { color: #2c3e50; margin-bottom: 10px; }
+        p { color: #7f8c8d; font-size: 14px; margin-bottom: 24px; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        label { display: block; text-align: left; font-weight: bold; color: #34495e; font-size: 14px; margin-top: 10px; }
+        button { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 15px; }
+        button:hover { background: #2980b9; }
+        .alert { padding: 10px; background: #e74c3c; color: white; margin-bottom: 15px; border-radius: 4px; font-size: 14px;}
+        .footer-link { margin-top: 20px; font-size: 14px; color: #7f8c8d; }
+        .footer-link a { color: #3498db; text-decoration: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="signup-card">
+        <h2>Create Account</h2>
+        <p>Join the Garbage Collector Service platform</p>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="text" name="username" placeholder="Choose a Username" required>
+            <input type="password" name="password" placeholder="Create a Password" required>
+            
+            <label for="role">Select Account Type:</label>
+            <select name="role" id="role" required>
+                <option value="user">Citizen (Report Issues)</option>
+                <option value="govt">Government Official (Manage & Resolve)</option>
+            </select>
+
+            <button type="submit">Register Account</button>
+        </form>
+
+        <div class="footer-link">
+            Already have an account? <a href="{{ url_for('login') }}">Sign In</a>
+        </div>
+    </div>
+</body>
+</html>

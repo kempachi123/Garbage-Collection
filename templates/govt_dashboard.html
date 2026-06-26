@@ -1,0 +1,135 @@
+{% macro render_card(report) %}
+<div class="card" id="card-{{ report.id }}">
+    <div class="card-meta">
+        <span>TICKET #{{ report.id }}</span>
+        <span style="font-size:10px; color:#ef4444; font-weight:bold;">⚠️ {{ report.ai_risk }}</span>
+    </div>
+    <img src="{{ url_for('static', filename='uploads/' + report.image) }}">
+    <div class="card-body">
+        <p style="font-size:11px; margin:0 0 5px 0; font-weight:bold; color:#2563eb;">📍 Location: {{ report.lat[:8] }}, {{ report.lng[:8] }}</p>
+        <p style="font-size:12px; color:#1e293b; line-height:1.4; margin-bottom:10px;">{{ report.description }}</p>
+        
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:6px; font-size:11px; color:#475569; margin-bottom:12px;">
+            📦 Class: <strong>{{ report.ai_category }}</strong>
+        </div>
+
+        {% if report.status != 'Pending Approval' and report.status != 'Works Done' %}
+        <form action="{{ url_for('update_status', report_id=report.id) }}" method="POST">
+            <select name="status" onchange="this.form.submit()">
+                <option value="Work to be Done" {% if report.status == 'Work to be Done' %}selected{% endif %}>Work to be Done</option>
+                <option value="Work in Progress" {% if report.status == 'Work in Progress' %}selected{% endif %}>Work in Progress</option>
+            </select>
+        </form>
+        
+        <form action="{{ url_for('govt_submit_proof', report_id=report.id) }}" method="POST" enctype="multipart/form-data" style="margin-top:10px; border-top:1px dashed #cbd5e1; padding-top:10px;">
+            <label style="font-size:11px; font-weight:bold; color:#475569; display:block; margin-bottom:4px;">Waste Diverted (KG):</label>
+            <input type="number" name="waste_removed" placeholder="Enter total KGs cleared..." required style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; box-sizing:border-box; margin-bottom:10px; font-size:13px;">
+            
+            <div class="file-mini-upload">
+                <input type="file" name="govt_photo" accept="image/*" required style="font-size:11px; margin-bottom:6px; width:100%;">
+            </div>
+            <button type="submit" class="upload-btn">Submit Verification Request</button>
+        </form>
+        {% endif %}
+
+        {% if report.status == 'Pending Approval' %}
+        <div style="background:#fef3c7; border:1px solid #fcd34d; color:#d97706; text-align:center; padding:8px; border-radius:6px; font-size:11px; font-weight:bold;">
+            ⏳ Awaiting Citizen Sign-off (Logged: {{ report.pending_waste_weight }} KG)
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Municipal Command & Control Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socketio/4.0.1/socketio.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f1f5f9; margin: 0; }
+        nav { background: #0f172a; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        nav h2 { margin: 0; font-size: 20px; font-weight: 900; color: #38bdf8; }
+        nav a { color: #94a3b8; text-decoration: none; font-weight: 600; font-size: 14px;}
+        
+        .metrics-banner { display: flex; gap: 20px; padding: 15px 40px; background: #fff; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; }
+        .metrics-left { display: flex; gap: 20px; }
+        .metric-widget { background: #0f172a; color: white; padding: 10px 20px; border-radius: 8px; display: flex; gap: 12px; align-items: center; font-size: 14px; }
+        .metric-widget h4 { margin: 0; font-size: 18px; color: #38bdf8; }
+        .metric-widget small { color: #94a3b8; }
+
+        /* Dashboard Global Logistics Map Styling */
+        #govt-map { width: 450px; height: 110px; border-radius: 8px; border: 1px solid #cbd5e1; }
+
+        .board { display: flex; gap: 20px; padding: 30px; overflow-x: auto; align-items: flex-start; }
+        .column { background: #e2e8f0; border-radius: 14px; width: 25%; min-width: 290px; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow-y: auto;}
+        .column h3 { margin: 0 0 5px 0; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; color: #334155;}
+        
+        .card { background: white; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px rgba(0,0,0,0.01); }
+        .card img { width: 100%; height: 140px; object-fit: cover; }
+        .card-meta { padding: 10px 14px 4px 14px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #64748b; }
+        .card-body { padding: 14px; }
+        
+        select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; font-size: 13px; font-weight: 600;}
+        .upload-btn { width: 100%; background: #2563eb; color: white; padding: 8px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px;}
+        .file-mini-upload { border: 1px dashed #cbd5e1; background: #f8fafc; padding: 6px; border-radius: 6px; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <h2>Strategic Municipal Logistics Management Engine</h2>
+        <a href="{{ url_for('logout') }}">Exit Console</a>
+    </nav>
+
+    <div class="metrics-banner">
+        <div class="metrics-left">
+            <div class="metric-widget">
+                <h4>{{ metrics.total_cleared_kg }} KG</h4>
+                <small>Approved Waste Removed</small>
+            </div>
+            <div class="metric-widget">
+                <h4>{{ metrics.active_clean_zones }}</h4>
+                <small>Verified Clean Zones</small>
+            </div>
+        </div>
+        
+        <div id="govt-map"></div>
+    </div>
+    
+    <div class="board">
+        <div class="column"><h3>🔴 Work to be Done</h3>
+            {% for report in reports if report.status == 'Work to be Done' %}{{ render_card(report) }}{% endfor %}
+        </div>
+        <div class="column"><h3>🔵 Work in Progress</h3>
+            {% for report in reports if report.status == 'Work in Progress' %}{{ render_card(report) }}{% endfor %}
+        </div>
+        <div class="column"><h3>🟪 Pending Approval</h3>
+            {% for report in reports if report.status == 'Pending Approval' %}{{ render_card(report) }}{% endfor %}
+        </div>
+        <div class="column"><h3>🟢 Resolved</h3>
+            {% for report in reports if report.status == 'Works Done' %}{{ render_card(report) }}{% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Set up the Master Dashboard overview map
+        var govtMap = L.map('govt-map').setView([12.9348, 77.5849], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(govtMap);
+
+        // Dynamic Loop: Parse all active reports from database into visual map marker pins
+        {% for report in reports %}
+            L.marker([{{ report.lat }}, {{ report.lng }}])
+                .addTo(govtMap)
+                .bindPopup("<b>Ticket #{{ report.id }}</b><br>{{ report.status }}");
+        {% endfor %}
+
+        var socket = io();
+        socket.on('new_incident_alert', function(data) { window.location.reload(); });
+        socket.on('status_changed', function(data) { window.location.reload(); });
+    </script>
+</body>
+</html>

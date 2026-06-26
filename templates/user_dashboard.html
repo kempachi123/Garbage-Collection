@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoClean Hub Platform</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socketio/4.0.1/socketio.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --dark: #0f172a; --glass: rgba(255, 255, 255, 0.85); --neon-green: #10b981; --neon-blue: #3b82f6; --purple: #8b5cf6;
+        }
+        body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #f8fafc, #e2e8f0); margin: 0; padding-bottom: 50px; color: #1e293b; }
+        nav { background: var(--dark); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; color: white; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .nav-brand { font-size: 22px; font-weight: 900; background: linear-gradient(to right, #10b981, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .wrapper { max-width: 1400px; margin: 30px auto; display: grid; grid-template-columns: 400px 1fr; gap: 25px; padding: 0 20px; }
+        .panel { background: var(--glass); backdrop-filter: blur(12px); border-radius: 16px; padding: 24px; border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 10px 30px rgba(15,23,42,0.04); height: fit-content; }
+        .panel h3 { margin-top: 0; font-weight: 800; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .metric-card { background: var(--dark); color: white; padding: 12px; border-radius: 12px; text-align: center; }
+        .metric-card h4 { margin: 0; font-size: 20px; color: var(--neon-green); }
+        textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; box-sizing: border-box; font-family: inherit; margin-bottom: 10px;}
+        .submit-btn { width: 100%; background: linear-gradient(to right, #10b981, #059669); color: white; font-weight: 700; padding: 12px; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; font-size: 14px;}
+        .submit-btn:hover { transform: translateY(-2px); }
+        .feed { display: flex; flex-direction: column; gap: 20px; }
+        .ticket-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+        .ticket-media { display: grid; grid-template-columns: 1fr; gap: 2px; background: #cbd5e1; }
+        .split-view { grid-template-columns: 1fr 1fr; }
+        .ticket-media img { width: 100%; height: 220px; object-fit: cover; }
+        .ticket-content { padding: 20px; }
+        .ai-badge { background: #f0fdf4; border: 1px dashed var(--neon-green); padding: 8px 12px; border-radius: 8px; font-size: 12px; color: #166534; margin: 10px 0; }
+        .chat-box { background: #f8fafc; border-radius: 8px; padding: 12px; max-height: 150px; overflow-y: auto; margin-top: 10px; font-size: 13px; }
+        .chat-msg { margin-bottom: 6px; }
+        .comment-input-form { display: flex; gap: 5px; margin-top: 8px; }
+        .comment-input-form input { flex-grow: 1; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; }
+        .comment-input-form button { padding: 6px 12px; background: var(--dark); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .status-pill { display: inline-block; padding: 4px 10px; border-radius: 50px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: white; margin-bottom: 10px; }
+        .todo { background: #f59e0b; } .progress { background: #3b82f6; } .pending { background: #8b5cf6; } .done { background: #10b981; }
+        
+        /* Interactive Map Canvas Wrapper Component */
+        #map { width: 100%; height: 240px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+        .map-instructions { font-size: 12px; color: var(--neon-blue); font-weight: 700; margin-bottom: 6px; display: block; text-align: center; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">🍃 EcoClean Core Platform</div>
+        <a href="{{ url_for('logout') }}">Sign Out</a>
+    </nav>
+
+    <div class="wrapper">
+        <div class="left-panel">
+            <div class="panel">
+                <h3>📊 Network Metrics</h3>
+                <div class="metric-row">
+                    <div class="metric-card"><h4>{{ metrics.total_cleared_kg }} KG</h4><small>Waste Cleared</small></div>
+                    <div class="metric-card"><h4>{{ metrics.active_clean_zones }}</h4><small>Clean Zones</small></div>
+                </div>
+                
+                <h3>🚨 Pinpoint & Report Hazard</h3>
+                <form method="POST" enctype="multipart/form-data" id="reportForm">
+                    <textarea name="description" rows="2" placeholder="Provide description or floor details..." required></textarea>
+                    
+                    <span class="map-instructions">📍 Click on the map below to set the precise garbage pin:</span>
+                    <div id="map"></div>
+                    
+                    <input type="hidden" name="latitude" id="latField" value="12.9348"> <input type="hidden" name="longitude" id="lngField" value="77.5849"> <input type="file" name="photo" accept="image/*" required style="margin-bottom:12px; font-size:12px; width:100%;">
+                    <button type="submit" class="submit-btn">Launch Report Pipeline</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="feed">
+            <h3 style="font-size: 18px; font-weight: 800; color: var(--dark); margin: 0 0 5px 0; text-transform: uppercase;">Active Jurisdictional Incidents</h3>
+            {% for report in reports %}
+            <div class="ticket-card" id="ticket-{{ report.id }}">
+                <div class="ticket-media {% if report.govt_image %}split-view{% endif %}">
+                    <img src="{{ url_for('static', filename='uploads/' + report.image) }}">
+                    {% if report.govt_image %}
+                        <img src="{{ url_for('static', filename='uploads/' + report.govt_image) }}">
+                    {% endif %}
+                </div>
+                <div class="ticket-content">
+                    <span class="status-pill {% if report.status == 'Work to be Done' %}todo{% elif report.status == 'Work in Progress' %}progress{% elif report.status == 'Pending Approval' %}pending{% else %}done{% endif %}">
+                        {{ report.status }}
+                    </span>
+                    <p style="font-weight: 700; margin-bottom:6px; font-size:14px;">🗺️ GPS Coordinates: <span style="color:var(--neon-blue)">{{ report.lat[:8] }}, {{ report.lng[:8] }}</span></p>
+                    <p style="margin-bottom:15px; font-size:15px; color:#334155;">{{ report.description }}</p>
+
+                    <div class="ai-badge">
+                        🤖 <strong>AI Scan:</strong> Identified as <strong>{{ report.ai_category }}</strong> — Risk: <strong>{{ report.ai_risk }}</strong>
+                    </div>
+
+                    <div class="chat-box" id="comments-{{ report.id }}">
+                        {% for comment in report.comments %}
+                        <div class="chat-msg"><strong>{{ comment.sender }}:</strong> {{ comment.text }}</div>
+                        {% endfor %}
+                    </div>
+                    <form action="{{ url_for('add_comment', report_id=report.id) }}" method="POST" class="comment-input-form">
+                        <input type="text" name="comment_text" placeholder="Transmit operational update..." required>
+                        <button type="submit">Send</button>
+                    </form>
+
+                    {% if report.status == 'Pending Approval' %}
+                    <form action="{{ url_for('approve_work', report_id=report.id) }}" method="POST">
+                        <button type="submit" style="width:100%; margin-top:15px; padding:12px; border:none; border-radius:8px; background:var(--purple); color:white; font-weight:bold; cursor:pointer;">⚡ Verify & Liquidate Ticket (+50 Points)</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Initialize Map engine centered natively right on Jayanagar, Bengaluru area
+        var initialLat = 12.9348;
+        var initialLng = 77.5849;
+        
+        var map = L.map('map').setView([initialLat, initialLng], 14);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap components'
+        }).addTo(map);
+
+        // Drop a draggable neon operational pin marker down on initialization point
+        var marker = L.marker([initialLat, initialLng], {draggable: true}).addTo(map);
+
+        // Update target hidden coordinates fields when user drags the marker pin around
+        function updateHiddenFields(lat, lng) {
+            document.getElementById('latField').value = lat;
+            document.getElementById('lngField').value = lng;
+        }
+
+        // Listener: Drop marker exactly where user clicks anywhere on the map grid frame
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            updateHiddenFields(e.latlng.lat, e.latlng.lng);
+        });
+
+        // Listener: Capture coordinates when a user finishes dragging the marker pin
+        marker.on('dragend', function(e) {
+            var position = marker.getLatLng();
+            updateHiddenFields(position.lat, position.lng);
+        });
+
+        // SocketIO operational matrix connection
+        var socket = io();
+        socket.on('status_changed', function(data) { window.location.reload(); });
+        socket.on('comment_update', function(data) {
+            var box = document.getElementById('comments-' + data.report_id);
+            if(box) {
+                box.innerHTML += '<div class="chat-msg"><strong>' + data.sender + ':</strong> ' + data.text + '</div>';
+                box.scrollTop = box.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
